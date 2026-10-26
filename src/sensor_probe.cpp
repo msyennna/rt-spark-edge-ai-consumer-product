@@ -30,6 +30,7 @@ volatile uint32_t g_ap3216c_ps_low_threshold = 0;
 volatile uint32_t g_ap3216c_ps_high_threshold = 0;
 volatile uint32_t g_ap3216c_ps_threshold_write_ok = 0;
 volatile uint32_t g_ap3216c_ps_thresholds_match = 0;
+volatile uint32_t g_ap3216c_ps_interrupt_mode = 0xFF;
 volatile uint32_t g_i2c2_last_error = 0;
 volatile uint32_t g_imu_configured = 0;
 volatile uint32_t g_imu_sample_valid = 0;
@@ -104,13 +105,15 @@ void SensorProbeTask(void *)
                                I2C_MEMADD_SIZE_8BIT, &mode, 1, 30) == HAL_OK) ? 1u : 0u;
     }
     // Temporary lab-only proximity thresholds (not calibrated):
-    // low=5, high=12. Write EACH register individually; don't assume the
-    // AP3216C supports an auto-incrementing multi-register write.
-    // 0x2A=1, 0x2B=1 => 5; 0x2C=0, 0x2D=3 => 12.
+    // observed paper-away ~26-27, paper-close ~743 (raw counts).
+    // Hysteresis test: low=60, high=120, to avoid latching near when
+    // background stays >5. Evaluate repeated close/away trials before release.
+    // Write EACH AP3216C register individually.
+    // 0x2A=0, 0x2B=15 => 60; 0x2C=0, 0x2D=30 => 120.
     g_ap3216c_ps_threshold_write_ok = 0u;
     if (g_ap3216c_configured) {
         const uint8_t addresses[4] = {0x2Au, 0x2Bu, 0x2Cu, 0x2Du};
-        const uint8_t wanted[4] = {1u, 1u, 0u, 3u};
+        const uint8_t wanted[4] = {0u, 15u, 0u, 30u};
         bool allWritten = true;
         for (unsigned i = 0; i < 4; ++i) {
             uint8_t value = wanted[i];
@@ -207,6 +210,16 @@ void SensorProbeTask(void *)
                     ++g_ap3216c_sample_count;
                 }
             }
+            // Record 0x22 PS interrupt mode: 1 is default hysteresis mode.
+            g_ap3216c_ps_interrupt_mode = 0xFFu;
+            if (g_ap3216c_detected && g_ap3216c_configured) {
+                uint8_t mode = 0xFFu;
+                if (HAL_I2C_Mem_Read(&s_i2c2, apsAddr, 0x22u,
+                                     I2C_MEMADD_SIZE_8BIT,
+                                     &mode, 1u, 40) == HAL_OK) {
+                    g_ap3216c_ps_interrupt_mode = (uint32_t)(mode & 0x01u);
+                }
+            }
             // Read each AP3216C configuration register separately for
             // reliable readback of experimental proximity thresholds.
             g_ap3216c_ps_settings_valid = 0u;
@@ -235,8 +248,8 @@ void SensorProbeTask(void *)
                         ((uint32_t)values[4] & 0x03u);
                     g_ap3216c_ps_settings_valid = 1u;
                     g_ap3216c_ps_thresholds_match =
-                        (g_ap3216c_ps_low_threshold == 5u &&
-                         g_ap3216c_ps_high_threshold == 12u) ? 1u : 0u;
+                        (g_ap3216c_ps_low_threshold == 60u &&
+                         g_ap3216c_ps_high_threshold == 120u) ? 1u : 0u;
                 }
             }
             g_i2c2_last_error = HAL_I2C_GetError(&s_i2c2);
