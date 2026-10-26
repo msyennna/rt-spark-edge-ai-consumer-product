@@ -28,6 +28,8 @@ volatile uint32_t g_ap3216c_ps_config_reg = 0;
 volatile uint32_t g_ap3216c_led_control_reg = 0;
 volatile uint32_t g_ap3216c_ps_low_threshold = 0;
 volatile uint32_t g_ap3216c_ps_high_threshold = 0;
+volatile uint32_t g_ap3216c_ps_threshold_write_ok = 0;
+volatile uint32_t g_ap3216c_ps_thresholds_match = 0;
 volatile uint32_t g_i2c2_last_error = 0;
 volatile uint32_t g_imu_configured = 0;
 volatile uint32_t g_imu_sample_valid = 0;
@@ -101,19 +103,25 @@ void SensorProbeTask(void *)
             (HAL_I2C_Mem_Write(&s_i2c2, apsAddr, 0x00u,
                                I2C_MEMADD_SIZE_8BIT, &mode, 1, 30) == HAL_OK) ? 1u : 0u;
     }
-    // TEMPORARY diagnostic thresholds only. Observed away ~2, close ~17.
-    // Hysteresis: near when PS > 12; away when PS < 5. These values are
-    // NOT calibrated and must be revisited after repeated controlled trials.
-    // AP3216C registers: 0x2A low-L, 0x2B low-H, 0x2C high-L, 0x2D high-H.
-    // Low threshold 5 -> {1, 1}; high threshold 12 -> {0, 3}.
+    // Temporary lab-only proximity thresholds (not calibrated):
+    // low=5, high=12. Write EACH register individually; don't assume the
+    // AP3216C supports an auto-incrementing multi-register write.
+    // 0x2A=1, 0x2B=1 => 5; 0x2C=0, 0x2D=3 => 12.
+    g_ap3216c_ps_threshold_write_ok = 0u;
     if (g_ap3216c_configured) {
-        uint8_t diagnosticThresholds[4] = {1u, 1u, 0u, 3u};
-        if (HAL_I2C_Mem_Write(&s_i2c2, apsAddr, 0x2Au,
-                              I2C_MEMADD_SIZE_8BIT,
-                              diagnosticThresholds, 4u, 40) != HAL_OK) {
-            // A failed threshold write is reported by the readback diagnostics.
-            g_ap3216c_configured = 0u;
+        const uint8_t addresses[4] = {0x2Au, 0x2Bu, 0x2Cu, 0x2Du};
+        const uint8_t wanted[4] = {1u, 1u, 0u, 3u};
+        bool allWritten = true;
+        for (unsigned i = 0; i < 4; ++i) {
+            uint8_t value = wanted[i];
+            if (HAL_I2C_Mem_Write(&s_i2c2, apsAddr, addresses[i],
+                                  I2C_MEMADD_SIZE_8BIT,
+                                  &value, 1u, 40) != HAL_OK) {
+                allWritten = false;
+                break;
+            }
         }
+        g_ap3216c_ps_threshold_write_ok = allWritten ? 1u : 0u;
     }
     if (g_ap3216c_configured) {
         vTaskDelay(pdMS_TO_TICKS(200)); // Allow initial optical measurements to settle.
@@ -184,27 +192,36 @@ void SensorProbeTask(void *)
                     ++g_ap3216c_sample_count;
                 }
             }
-            // Read-only proximity configuration and near/far thresholds.
-            // No settings are changed by this diagnostic.
+            // Read each AP3216C configuration register separately for
+            // reliable readback of experimental proximity thresholds.
             g_ap3216c_ps_settings_valid = 0u;
+            g_ap3216c_ps_thresholds_match = 0u;
             if (g_ap3216c_detected && g_ap3216c_configured) {
-                uint8_t configRegs[2] = {};
-                uint8_t thresholdRegs[4] = {};
-                if (HAL_I2C_Mem_Read(&s_i2c2, apsAddr, 0x20u,
-                                     I2C_MEMADD_SIZE_8BIT,
-                                     configRegs, sizeof(configRegs), 40) == HAL_OK &&
-                    HAL_I2C_Mem_Read(&s_i2c2, apsAddr, 0x2Au,
-                                     I2C_MEMADD_SIZE_8BIT,
-                                     thresholdRegs, sizeof(thresholdRegs), 40) == HAL_OK) {
-                    g_ap3216c_ps_config_reg = configRegs[0];
-                    g_ap3216c_led_control_reg = configRegs[1];
+                const uint8_t addresses[6] =
+                    {0x20u, 0x21u, 0x2Au, 0x2Bu, 0x2Cu, 0x2Du};
+                uint8_t values[6] = {};
+                bool readOk = true;
+                for (unsigned i = 0; i < 6; ++i) {
+                    if (HAL_I2C_Mem_Read(&s_i2c2, apsAddr, addresses[i],
+                                         I2C_MEMADD_SIZE_8BIT,
+                                         &values[i], 1u, 40) != HAL_OK) {
+                        readOk = false;
+                        break;
+                    }
+                }
+                if (readOk) {
+                    g_ap3216c_ps_config_reg = values[0];
+                    g_ap3216c_led_control_reg = values[1];
                     g_ap3216c_ps_low_threshold =
-                        ((uint32_t)thresholdRegs[1] << 2) |
-                        ((uint32_t)thresholdRegs[0] & 0x03u);
+                        ((uint32_t)values[3] << 2) |
+                        ((uint32_t)values[2] & 0x03u);
                     g_ap3216c_ps_high_threshold =
-                        ((uint32_t)thresholdRegs[3] << 2) |
-                        ((uint32_t)thresholdRegs[2] & 0x03u);
+                        ((uint32_t)values[5] << 2) |
+                        ((uint32_t)values[4] & 0x03u);
                     g_ap3216c_ps_settings_valid = 1u;
+                    g_ap3216c_ps_thresholds_match =
+                        (g_ap3216c_ps_low_threshold == 5u &&
+                         g_ap3216c_ps_high_threshold == 12u) ? 1u : 0u;
                 }
             }
             g_i2c2_last_error = HAL_I2C_GetError(&s_i2c2);
