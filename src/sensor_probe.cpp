@@ -23,6 +23,11 @@ volatile uint32_t g_ap3216c_ps_raw = 0;
 volatile uint32_t g_ap3216c_ir_raw = 0;
 volatile uint32_t g_ap3216c_object_near = 0;
 volatile uint32_t g_ap3216c_ps_valid = 0;
+volatile uint32_t g_ap3216c_ps_settings_valid = 0;
+volatile uint32_t g_ap3216c_ps_config_reg = 0;
+volatile uint32_t g_ap3216c_led_control_reg = 0;
+volatile uint32_t g_ap3216c_ps_low_threshold = 0;
+volatile uint32_t g_ap3216c_ps_high_threshold = 0;
 volatile uint32_t g_i2c2_last_error = 0;
 volatile uint32_t g_imu_configured = 0;
 volatile uint32_t g_imu_sample_valid = 0;
@@ -163,6 +168,29 @@ void SensorProbeTask(void *)
                     g_ap3216c_ps_valid = (!irOverflow && !psOverflow) ? 1u : 0u;
                     g_ap3216c_sample_valid = 1u; // Successful transfer; PS has separate validity flag.
                     ++g_ap3216c_sample_count;
+                }
+            }
+            // Read-only proximity configuration and near/far thresholds.
+            // No settings are changed by this diagnostic.
+            g_ap3216c_ps_settings_valid = 0u;
+            if (g_ap3216c_detected && g_ap3216c_configured) {
+                uint8_t configRegs[2] = {};
+                uint8_t thresholdRegs[4] = {};
+                if (HAL_I2C_Mem_Read(&s_i2c2, apsAddr, 0x20u,
+                                     I2C_MEMADD_SIZE_8BIT,
+                                     configRegs, sizeof(configRegs), 40) == HAL_OK &&
+                    HAL_I2C_Mem_Read(&s_i2c2, apsAddr, 0x2Au,
+                                     I2C_MEMADD_SIZE_8BIT,
+                                     thresholdRegs, sizeof(thresholdRegs), 40) == HAL_OK) {
+                    g_ap3216c_ps_config_reg = configRegs[0];
+                    g_ap3216c_led_control_reg = configRegs[1];
+                    g_ap3216c_ps_low_threshold =
+                        ((uint32_t)thresholdRegs[1] << 2) |
+                        ((uint32_t)thresholdRegs[0] & 0x03u);
+                    g_ap3216c_ps_high_threshold =
+                        ((uint32_t)thresholdRegs[3] << 2) |
+                        ((uint32_t)thresholdRegs[2] & 0x03u);
+                    g_ap3216c_ps_settings_valid = 1u;
                 }
             }
             g_i2c2_last_error = HAL_I2C_GetError(&s_i2c2);
