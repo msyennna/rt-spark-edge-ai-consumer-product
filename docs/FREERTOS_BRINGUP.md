@@ -40,6 +40,18 @@ SensorTask, InferenceTask and FeedbackTask plus the required queues/synchronizat
    `g_min_ever_free_heap_bytes`, `g_led_stack_free_words`.
 7. Preserve the build/upload output and record test observations.
 
+## Cortex-M4F FPU build configuration
+
+The FreeRTOS `ARM_CM4F` port includes floating-point register context-save
+instructions. The initial build failed at `port.o` with `vstmdbeq` and
+`vldmiaeq` assembler errors because the PlatformIO STM32Cube configuration
+had not selected the floating-point instruction set. The project now sets
+`-mfpu=fpv4-sp-d16` and `-mfloat-abi=softfp` in `platformio.ini`. These
+allow hardware FP instructions while preserving the soft-float calling
+convention for compatibility. Rebuild the **entire** firmware with these flags.
+This fix is not validated until a local clean build passes and the scheduler
+runs on the physical board.
+
 ## Interrupt/clock notes
 
 - `HAL_Init()` sets up the initial HAL millisecond tick (internal
