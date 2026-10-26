@@ -6,23 +6,22 @@
 
 - `main` is the shared, approved integration branch. Never push feature code directly to `main`.
 - `setup/firmware-foundation` holds the initial unverified build scaffold. Review and test before merging.
-- After the foundation is merged, each member branches **from the updated main**:
-  - `feature/sensors` — board inventory, sensor drivers, sampling, diagnostics.
-  - `feature/ml-pipeline` — labeled data, DSP, training, baseline, exported model.
-  - `feature/local-ui` — LCD, buttons, LEDs, buzzer and feedback.
-  - `feature/rtos-integration` — FreeRTOS configuration, task ownership, queues and fault handling.
-- Branch examples are workstreams, not necessarily one branch per person; assign them according to group size.
+- This is a **three-member group**. After the foundation is reviewed, tested and merged, each member branches **from the updated main**:
+  - `feature/firmware-rtos` — Member 1: verified board config, STM32Cube/FreeRTOS foundation, sensor drivers, sampling and integration.
+  - `feature/edge-ai` — Member 2: board-data collection plan, DSP/features, labeled dataset, baseline, model training/validation, exported on-device inference.
+  - `feature/local-ui` — Member 3: LCD, buttons, LEDs/buzzer, diagnostics UI, local feedback and logging.
+- These assignments are proposals until each team member confirms their GitHub username and workstream. All three participate in board testing, validation, documentation and final demonstration. The firmware and ML owners coordinate the captured data format; the UI and integration owners coordinate status messages and task interfaces.
 - Members who need to change common startup, clock, pin, interrupt, linker, FreeRTOS configuration or `platformio.ini` must coordinate first with the integration owner.
 
-## Ownership table — fill in GitHub usernames
+## Three-member ownership — fill in actual GitHub usernames
 
-| Workstream | GitHub owner | Reviewer | Current status |
-|---|---|---|---|
-| STM32Cube / FreeRTOS integration | TBD | TBD | Not started |
-| Onboard sensor drivers & diagnostics | TBD | TBD | Not started |
-| Data, DSP, training & on-device inference | TBD | TBD | Not started |
-| LCD / buttons / local feedback | TBD | TBD | Not started |
-| Test evidence / report / reproducibility | TBD | TBD | Not started |
+| Member | Proposed branch | Primary work | Peer reviewer | Status |
+|---|---|---|---|---|
+| Member 1 (suggested: firmware lead) | `feature/firmware-rtos` | PlatformIO + FreeRTOS, board config, drivers, sensor acquisition, system integration | Member 3 | Unassigned |
+| Member 2 (suggested: Edge AI lead) | `feature/edge-ai` | Data capture protocol, labels, DSP, train/test split, baseline, model evaluation and MCU inference | Member 1 | Unassigned |
+| Member 3 (suggested: feedback lead) | `feature/local-ui` | LCD, buttons, alarms, diagnostic/service UI, local output and event logs | Member 2 | Unassigned |
+
+**Shared responsibilities:** real hardware inventory, data collection sessions, code reviews, offline demonstration, 20+ trials per classification state, inference latency runs, 15-minute soak test, evidence, report, and individual explanation. Every member reviews at least one other member's Pull Request. The integration lead may coordinate release builds, but does not merge without review.
 
 **Shared contract:** One firmware image, one PlatformIO config, central peripheral pin map, a single scheduler, one owner of interrupt vectors, and clearly defined interfaces between modules. Do not paste multiple independent `main()` programs together.
 
@@ -31,7 +30,7 @@
 1. Clone: `git clone https://github.com/msyennna/rt-spark-edge-ai-consumer-product.git`
 2. Enter the repo: `cd rt-spark-edge-ai-consumer-product`
 3. Update: `git switch main && git pull --ff-only origin main`
-4. Create your branch: `git switch -c feature/sensors` (use your assigned name).
+4. Create your branch: `git switch -c feature/firmware-rtos` (replace with your assigned branch).
 5. Implement only the agreed workstream. Use `git status` and `git diff` before committing.
 6. Stage selected files: `git add src/sensors.cpp include/sensors.h` (example only; replace with actual paths).
 7. Commit: `git commit -m "feat: add sensor readout"`
