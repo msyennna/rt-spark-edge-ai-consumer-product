@@ -15,6 +15,14 @@ volatile uint32_t g_icm20608_detected = 0;
 volatile uint32_t g_icm20608_whoami = 0xFF;
 volatile uint32_t g_icm20608_id_valid = 0;
 volatile uint32_t g_ap3216c_detected = 0;
+volatile uint32_t g_ap3216c_configured = 0;
+volatile uint32_t g_ap3216c_sample_valid = 0;
+volatile uint32_t g_ap3216c_sample_count = 0;
+volatile uint32_t g_ap3216c_als_raw = 0;
+volatile uint32_t g_ap3216c_ps_raw = 0;
+volatile uint32_t g_ap3216c_ir_raw = 0;
+volatile uint32_t g_ap3216c_object_near = 0;
+volatile uint32_t g_ap3216c_ps_valid = 0;
 volatile uint32_t g_i2c2_last_error = 0;
 volatile uint32_t g_imu_configured = 0;
 volatile uint32_t g_imu_sample_valid = 0;
@@ -78,6 +86,20 @@ void SensorProbeTask(void *)
         }
     }
 
+    // AP3216C mode 0x03 enables ALS + PS/IR functions.
+    // Datasheet system config 0x00, measurement registers 0x0A..0x0F.
+    const uint16_t apsAddr = (uint16_t)(0x1Eu << 1);
+    if (g_i2c2_initialized &&
+        HAL_I2C_IsDeviceReady(&s_i2c2, apsAddr, 2, 20) == HAL_OK) {
+        uint8_t mode = 0x03u;
+        g_ap3216c_configured =
+            (HAL_I2C_Mem_Write(&s_i2c2, apsAddr, 0x00u,
+                               I2C_MEMADD_SIZE_8BIT, &mode, 1, 30) == HAL_OK) ? 1u : 0u;
+    }
+    if (g_ap3216c_configured) {
+        vTaskDelay(pdMS_TO_TICKS(200)); // Allow initial optical measurements to settle.
+    }
+
     TickType_t lastWake = xTaskGetTickCount();
     for (;;) {
         ++g_sensor_probe_count;
@@ -118,6 +140,31 @@ void SensorProbeTask(void *)
             }
             g_ap3216c_detected =
                 (HAL_I2C_IsDeviceReady(&s_i2c2, apsAddr, 2, 20) == HAL_OK) ? 1u : 0u;
+            g_ap3216c_sample_valid = 0;
+            g_ap3216c_ps_valid = 0;
+            if (g_ap3216c_detected && g_ap3216c_configured) {
+                uint8_t optical[6] = {};
+                if (HAL_I2C_Mem_Read(&s_i2c2, apsAddr, 0x0Au,
+                                     I2C_MEMADD_SIZE_8BIT, optical, 6u, 40) == HAL_OK) {
+                    // 0x0A/0x0B: IR, lower two bits of IR low are data;
+                    // bit 7 of IR low indicates IR overflow.
+                    // 0x0C/0x0D: 16-bit ALS raw count.
+                    // 0x0E/0x0F: PS (10 bit), status/overflow bits also encoded.
+                    const uint32_t irOverflow = (optical[0] & 0x80u) ? 1u : 0u;
+                    const uint32_t psOverflow =
+                        ((optical[4] | optical[5]) & 0x40u) ? 1u : 0u;
+                    g_ap3216c_ir_raw =
+                        ((uint32_t)optical[1] << 2) | (optical[0] & 0x03u);
+                    g_ap3216c_als_raw =
+                        ((uint32_t)optical[3] << 8) | (uint32_t)optical[2];
+                    g_ap3216c_ps_raw =
+                        ((uint32_t)(optical[5] & 0x3Fu) << 4) | (optical[4] & 0x0Fu);
+                    g_ap3216c_object_near = (optical[4] & 0x80u) ? 1u : 0u;
+                    g_ap3216c_ps_valid = (!irOverflow && !psOverflow) ? 1u : 0u;
+                    g_ap3216c_sample_valid = 1u; // Successful transfer; PS has separate validity flag.
+                    ++g_ap3216c_sample_count;
+                }
+            }
             g_i2c2_last_error = HAL_I2C_GetError(&s_i2c2);
         }
 
