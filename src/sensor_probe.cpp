@@ -101,6 +101,20 @@ void SensorProbeTask(void *)
             (HAL_I2C_Mem_Write(&s_i2c2, apsAddr, 0x00u,
                                I2C_MEMADD_SIZE_8BIT, &mode, 1, 30) == HAL_OK) ? 1u : 0u;
     }
+    // TEMPORARY diagnostic thresholds only. Observed away ~2, close ~17.
+    // Hysteresis: near when PS > 12; away when PS < 5. These values are
+    // NOT calibrated and must be revisited after repeated controlled trials.
+    // AP3216C registers: 0x2A low-L, 0x2B low-H, 0x2C high-L, 0x2D high-H.
+    // Low threshold 5 -> {1, 1}; high threshold 12 -> {0, 3}.
+    if (g_ap3216c_configured) {
+        uint8_t diagnosticThresholds[4] = {1u, 1u, 0u, 3u};
+        if (HAL_I2C_Mem_Write(&s_i2c2, apsAddr, 0x2Au,
+                              I2C_MEMADD_SIZE_8BIT,
+                              diagnosticThresholds, 4u, 40) != HAL_OK) {
+            // A failed threshold write is reported by the readback diagnostics.
+            g_ap3216c_configured = 0u;
+        }
+    }
     if (g_ap3216c_configured) {
         vTaskDelay(pdMS_TO_TICKS(200)); // Allow initial optical measurements to settle.
     }
