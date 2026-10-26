@@ -170,9 +170,24 @@ void SensorProbeTask(void *)
             g_ap3216c_sample_valid = 0;
             g_ap3216c_ps_valid = 0;
             if (g_ap3216c_detected && g_ap3216c_configured) {
+                // AP3216C data registers 0x0A..0x0F must be addressed
+                // individually. A six-byte read starting at 0x0A previously
+                // produced repeating IR register data masquerading as ALS/PS.
+                // Read each low byte BEFORE its high byte (high value is
+                // latched by the low-byte read, per the AP3216C datasheet).
+                const uint8_t registers[6] =
+                    {0x0Au, 0x0Bu, 0x0Cu, 0x0Du, 0x0Eu, 0x0Fu};
                 uint8_t optical[6] = {};
-                if (HAL_I2C_Mem_Read(&s_i2c2, apsAddr, 0x0Au,
-                                     I2C_MEMADD_SIZE_8BIT, optical, 6u, 40) == HAL_OK) {
+                bool allRead = true;
+                for (unsigned i = 0; i < 6; ++i) {
+                    if (HAL_I2C_Mem_Read(&s_i2c2, apsAddr, registers[i],
+                                         I2C_MEMADD_SIZE_8BIT,
+                                         &optical[i], 1u, 40) != HAL_OK) {
+                        allRead = false;
+                        break;
+                    }
+                }
+                if (allRead) {
                     // 0x0A/0x0B: IR, lower two bits of IR low are data;
                     // bit 7 of IR low indicates IR overflow.
                     // 0x0C/0x0D: 16-bit ALS raw count.
@@ -188,7 +203,7 @@ void SensorProbeTask(void *)
                         ((uint32_t)(optical[5] & 0x3Fu) << 4) | (optical[4] & 0x0Fu);
                     g_ap3216c_object_near = (optical[4] & 0x80u) ? 1u : 0u;
                     g_ap3216c_ps_valid = (!irOverflow && !psOverflow) ? 1u : 0u;
-                    g_ap3216c_sample_valid = 1u; // Successful transfer; PS has separate validity flag.
+                    g_ap3216c_sample_valid = 1u; // All six distinct register reads succeeded.
                     ++g_ap3216c_sample_count;
                 }
             }
