@@ -10,6 +10,17 @@ extern volatile uint32_t g_icm20608_detected;
 extern volatile uint32_t g_icm20608_whoami; // 0xFF means not read
 extern volatile uint32_t g_icm20608_id_valid;
 extern volatile uint32_t g_ap3216c_detected;
+// Stage 3C: AP3216C ambient-light and proximity measurements.
+// Values are raw ADC counts; do not describe them as lux or distance.
+extern volatile uint32_t g_ap3216c_configured;
+extern volatile uint32_t g_ap3216c_sample_valid;
+extern volatile uint32_t g_ap3216c_sample_count;
+extern volatile uint32_t g_ap3216c_als_raw;
+extern volatile uint32_t g_ap3216c_ps_raw;
+extern volatile uint32_t g_ap3216c_ir_raw;
+extern volatile uint32_t g_ap3216c_object_near;
+extern volatile uint32_t g_ap3216c_ps_valid;
+
 extern volatile uint32_t g_i2c2_last_error;
 
 // Stage 3B: real IMU sample diagnostics (raw 16-bit sensor counts, not calibrated).
