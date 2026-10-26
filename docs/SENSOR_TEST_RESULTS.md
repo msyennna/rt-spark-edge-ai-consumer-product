@@ -29,11 +29,22 @@
 - For the final removal screenshot: `g_ap3216c_sample_valid = 1`, `g_ap3216c_ps_valid = 1`, `g_ap3216c_ps_thresholds_match = 1`, `g_i2c2_last_error = 0`, `g_boot_error = 0`.
 - **Status:** One near/away transition successfully demonstrated. Not yet statistically validated or calibrated.
 
+## AHT21 temperature / humidity — initial readout
+
+- On-board AHT21 software-I2C diagnostic on PE0 (SCL) / PE1 (SDA) was observed running with the FreeRTOS scheduler.
+- VS Code ST-LINK WATCH evidence (2026-10-26):
+  - `g_aht_probe_count = 10`, `g_aht_present = 1`, `g_aht_status = 24` (0x18).
+  - `g_aht_calibrated = 1`, `g_aht_sample_valid = 1`, `g_aht_sample_count = 10`, `g_aht_crc_ok = 1`.
+  - `g_aht_temperature_centi_c = 3144` => **31.44 °C**.
+  - `g_aht_humidity_centi_pct = 8338` => **83.38 % RH**.
+  - `g_aht_error_code = 0`, `g_boot_error = 0`.
+- **Status:** Initial CRC-checked temperature and humidity measurement demonstrated on hardware. Accuracy, response, and longer-duration reliability remain unvalidated.
+
 ## Limitations / follow-up
 
 1. Repeat near/away test with at least several cycles, varied ambient light, and different reflective surfaces; inspect noise / false transitions.
 2. Current proximity thresholds are **temporary test values**, not a final product calibration.
 3. Do not treat saturated `1023` as distance or use raw ALS readings as lux without correct range conversion.
-4. Validate the AHT21 temperature/humidity sensor at 7-bit address `0x38`, using its *separate* software-I2C pins after checking the board schematic/revision.
+4. Repeat AHT21 measurements over time and compare with a reference thermometer/hygrometer; verify response to moderate environmental changes.
 5. Define the consumer-product application and required sample rates before replacing these low-rate diagnostic probes with sensor acquisition + queues + on-device ML inference.
 6. Save original WATCH screenshots locally for lab evidence and upload copies separately if requested. This document records the observed values only.
