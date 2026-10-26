@@ -97,6 +97,8 @@ int main(void)
     for (;;) {}
 }
 
+extern "C" void xPortSysTickHandler(void);
+
 // HAL's 1 ms timer must continue even before FreeRTOS starts.
 // FreeRTOS's Cortex-M4F port owns SVC and PendSV handlers.
 extern "C" void SysTick_Handler(void)
