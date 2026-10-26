@@ -29,6 +29,8 @@ extern volatile uint32_t g_ap3216c_ps_low_threshold;
 extern volatile uint32_t g_ap3216c_ps_high_threshold;
 extern volatile uint32_t g_ap3216c_ps_threshold_write_ok;
 extern volatile uint32_t g_ap3216c_ps_thresholds_match;
+// 0 = zone, 1 = hysteresis, 255 = I2C read unavailable.
+extern volatile uint32_t g_ap3216c_ps_interrupt_mode;
 
 extern volatile uint32_t g_i2c2_last_error;
 
