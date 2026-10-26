@@ -16,6 +16,20 @@ volatile uint32_t g_icm20608_whoami = 0xFF;
 volatile uint32_t g_icm20608_id_valid = 0;
 volatile uint32_t g_ap3216c_detected = 0;
 volatile uint32_t g_i2c2_last_error = 0;
+volatile uint32_t g_imu_configured = 0;
+volatile uint32_t g_imu_sample_valid = 0;
+volatile uint32_t g_imu_sample_count = 0;
+volatile int32_t g_accel_x_raw = 0;
+volatile int32_t g_accel_y_raw = 0;
+volatile int32_t g_accel_z_raw = 0;
+volatile int32_t g_gyro_x_raw = 0;
+volatile int32_t g_gyro_y_raw = 0;
+volatile int32_t g_gyro_z_raw = 0;
+
+static int16_t DecodeSigned16(const uint8_t* b)
+{
+    return (int16_t)((uint16_t)((uint16_t)b[0] << 8) | b[1]);
+}
 
 static I2C_HandleTypeDef s_i2c2 = {};
 
@@ -51,6 +65,19 @@ void SensorProbeTask(void *)
     vTaskDelay(pdMS_TO_TICKS(100));
     g_i2c2_initialized = InitializeI2C2() ? 1u : 0u;
 
+    // Wake the IMU from sleep using PWR_MGMT_1 = 0x00.
+    // This is intentionally one-time initialization; do not reset it each probe.
+    const uint16_t icmAddr = (uint16_t)(0x68u << 1);
+    if (g_i2c2_initialized &&
+        HAL_I2C_IsDeviceReady(&s_i2c2, icmAddr, 2, 20) == HAL_OK) {
+        uint8_t wake = 0x00u;
+        if (HAL_I2C_Mem_Write(&s_i2c2, icmAddr, 0x6Bu,
+                              I2C_MEMADD_SIZE_8BIT, &wake, 1u, 30) == HAL_OK) {
+            g_imu_configured = 1;
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+    }
+
     TickType_t lastWake = xTaskGetTickCount();
     for (;;) {
         ++g_sensor_probe_count;
@@ -70,6 +97,23 @@ void SensorProbeTask(void *)
                                      I2C_MEMADD_SIZE_8BIT, &whoami, 1u, 30) == HAL_OK) {
                     g_icm20608_whoami = whoami;
                     g_icm20608_id_valid = (whoami == 0xAFu) ? 1u : 0u;
+                }
+            }
+            // Read consecutive accel, temperature, and gyro registers (0x3B..0x48).
+            // Only update six-axis values after a complete successful transfer.
+            g_imu_sample_valid = 0;
+            if (g_icm20608_id_valid && g_imu_configured) {
+                uint8_t raw[14] = {};
+                if (HAL_I2C_Mem_Read(&s_i2c2, icmAddr, 0x3Bu,
+                                     I2C_MEMADD_SIZE_8BIT, raw, 14u, 40) == HAL_OK) {
+                    g_accel_x_raw = DecodeSigned16(&raw[0]);
+                    g_accel_y_raw = DecodeSigned16(&raw[2]);
+                    g_accel_z_raw = DecodeSigned16(&raw[4]);
+                    g_gyro_x_raw = DecodeSigned16(&raw[8]);
+                    g_gyro_y_raw = DecodeSigned16(&raw[10]);
+                    g_gyro_z_raw = DecodeSigned16(&raw[12]);
+                    ++g_imu_sample_count;
+                    g_imu_sample_valid = 1;
                 }
             }
             g_ap3216c_detected =
