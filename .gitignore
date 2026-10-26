@@ -1,0 +1,16 @@
+.pio/
+.vscode/*
+!.vscode/extensions.json
+__pycache__/
+*.pyc
+*.log
+*.elf
+*.bin
+*.hex
+.DS_Store
+Thumbs.db
+# Never commit credentials or local secrets
+.env
+.env.*
+!.env.example
+platformio.local.ini
