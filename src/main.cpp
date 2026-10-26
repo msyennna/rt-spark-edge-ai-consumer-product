@@ -28,3 +28,11 @@ int main(void)
         HAL_Delay(500);        // Expected ~0.5 s change per toggle.
     }
 }
+
+// HAL_Init() configures the SysTick timer, but this bare-metal project must
+// provide an IRQ handler to advance the HAL millisecond timebase.
+// FreeRTOS integration will later require coordinated tick/interrupt ownership.
+extern "C" void SysTick_Handler(void)
+{
+    HAL_IncTick();
+}
