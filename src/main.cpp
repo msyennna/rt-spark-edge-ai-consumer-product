@@ -4,6 +4,7 @@
 #include "stm32f4xx_hal.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "sensor_probe.h"
 
 volatile uint32_t g_led_count = 0;
 volatile uint32_t g_health_count = 0;
@@ -88,6 +89,11 @@ int main(void)
     }
     if (xTaskCreate(DiagnosticsTask, "Diagnostics", 256, nullptr, 1, nullptr) != pdPASS) {
         g_boot_error = 3;
+        for (;;) {}
+    }
+
+    if (xTaskCreate(SensorProbeTask, "SensorProbe", 384, nullptr, 1, nullptr) != pdPASS) {
+        g_boot_error = 7;
         for (;;) {}
     }
 
