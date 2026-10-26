@@ -21,6 +21,13 @@ extern volatile uint32_t g_ap3216c_ir_raw;
 extern volatile uint32_t g_ap3216c_object_near;
 extern volatile uint32_t g_ap3216c_ps_valid;
 
+// Read-only proximity configuration diagnostics for threshold troubleshooting.
+extern volatile uint32_t g_ap3216c_ps_settings_valid;
+extern volatile uint32_t g_ap3216c_ps_config_reg;
+extern volatile uint32_t g_ap3216c_led_control_reg;
+extern volatile uint32_t g_ap3216c_ps_low_threshold;
+extern volatile uint32_t g_ap3216c_ps_high_threshold;
+
 extern volatile uint32_t g_i2c2_last_error;
 
 // Stage 3B: real IMU sample diagnostics (raw 16-bit sensor counts, not calibrated).
