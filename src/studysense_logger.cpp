@@ -10,6 +10,9 @@
 #include "sensor_probe.h"
 #include "aht21_probe.h"
 
+// Boot diagnostics defined by src/main.cpp (shared across translation units).
+extern volatile uint32_t g_boot_error;
+
 volatile uint32_t g_studysense_uart_initialized = 0;
 volatile uint32_t g_studysense_log_count = 0;
 volatile uint32_t g_studysense_uart_errors = 0;
