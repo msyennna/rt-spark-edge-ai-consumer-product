@@ -6,6 +6,7 @@
 #include "task.h"
 #include "sensor_probe.h"
 #include "aht21_probe.h"
+#include "studysense_logger.h"
 
 volatile uint32_t g_led_count = 0;
 volatile uint32_t g_health_count = 0;
@@ -100,6 +101,12 @@ int main(void)
 
     if (xTaskCreate(Aht21Task, "AHT21", 384, nullptr, 1, nullptr) != pdPASS) {
         g_boot_error = 8;
+        for (;;) {}
+    }
+
+    // Stage 0: separate low-rate UART CSV output for geometry/board checks.
+    if (xTaskCreate(StudySenseLoggerTask, "SS_Log", 384, nullptr, 1, nullptr) != pdPASS) {
+        g_boot_error = 9;
         for (;;) {}
     }
 
