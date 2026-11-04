@@ -49,4 +49,7 @@ extern volatile int32_t g_gyro_z_raw;
 
 // FreeRTOS task entry point. RT-Spark reference schematic HW1.1:
 // I2C2: PF1=SCL, PF0=SDA; ICM20608 @ 0x68; AP3216C @ 0x1E.
+// Returns one fresh accel sample with a protected I2C2 transaction.
+// False means no valid sample: DO NOT treat as zero motion.
+bool SensorReadMotionAcceleration(int16_t *x, int16_t *y, int16_t *z);
 void SensorProbeTask(void *parameters);

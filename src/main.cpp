@@ -7,6 +7,7 @@
 #include "sensor_probe.h"
 #include "aht21_probe.h"
 #include "studysense_logger.h"
+#include "motion_probe.h"
 
 volatile uint32_t g_led_count = 0;
 volatile uint32_t g_health_count = 0;
@@ -107,6 +108,12 @@ int main(void)
     // Stage 0: separate low-rate UART CSV output for geometry/board checks.
     if (xTaskCreate(StudySenseLoggerTask, "SS_Log", 384, nullptr, 1, nullptr) != pdPASS) {
         g_boot_error = 9;
+        for (;;) {}
+    }
+
+    // Experimental fast motion task (~50 Hz) owns no other I2C peripheral.
+    if (xTaskCreate(MotionSamplerTask, "Motion", 384, nullptr, 2, nullptr) != pdPASS) {
+        g_boot_error = 10;
         for (;;) {}
     }
 

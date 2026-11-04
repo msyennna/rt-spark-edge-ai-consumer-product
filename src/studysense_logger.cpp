@@ -9,6 +9,7 @@
 #include "task.h"
 #include "sensor_probe.h"
 #include "aht21_probe.h"
+#include "motion_probe.h"
 
 // Boot diagnostics defined by src/main.cpp (shared across translation units).
 extern volatile uint32_t g_boot_error;
@@ -63,7 +64,9 @@ void StudySenseLoggerTask(void *) {
     writeLine("# StudySense diagnostic logger v0; NOT final training dataset\r\n");
     writeLine("timestamp_ms,ps_raw,als_raw,near,ps_valid,optical_valid,optical_seq,"
               "temperature_centi_c,humidity_centi_pct,aht_valid,aht_crc_ok,"
-              "aht_seq,imu_valid,imu_seq,boot_error\r\n");
+              "aht_seq,imu_valid,imu_seq,boot_error,"
+              "motion_valid,motion_window_seq,motion_samples,motion_mean_delta,"
+              "motion_peak_delta,motion_failed,motion_elapsed_ms,motion_max_gap_ms\r\n");
 
     TickType_t wake = xTaskGetTickCount();
     for (;;) {
@@ -85,11 +88,23 @@ void StudySenseLoggerTask(void *) {
         const uint32_t imuValid = g_imu_sample_valid;
         const uint32_t imuSeq = g_imu_sample_count;
         const uint32_t bootError = g_boot_error;
+        // Coherent published 2-second IMU diagnostic snapshot.
+        taskENTER_CRITICAL();
+        const uint32_t motionValid = g_motion_valid;
+        const uint32_t motionWindowSeq = g_motion_window_seq;
+        const uint32_t motionSamples = g_motion_samples;
+        const uint32_t motionMeanDelta = g_motion_mean_delta;
+        const uint32_t motionPeakDelta = g_motion_peak_delta;
+        const uint32_t motionFailed = g_motion_failed;
+        const uint32_t motionElapsedMs = g_motion_elapsed_ms;
+        const uint32_t motionMaxGapMs = g_motion_max_gap_ms;
+        taskEXIT_CRITICAL();
 
-        char line[200] = {};
+        char line[320] = {};
         const int n = snprintf(
             line, sizeof(line),
-            "%lu,%lu,%lu,%lu,%lu,%lu,%lu,%ld,%lu,%lu,%lu,%lu,%lu,%lu,%lu\r\n",
+            "%lu,%lu,%lu,%lu,%lu,%lu,%lu,%ld,%lu,%lu,%lu,%lu,%lu,%lu,%lu,"
+            "%lu,%lu,%lu,%lu,%lu,%lu,%lu,%lu\r\n",
             static_cast<unsigned long>(timeMs),
             static_cast<unsigned long>(ps),
             static_cast<unsigned long>(als),
@@ -104,7 +119,15 @@ void StudySenseLoggerTask(void *) {
             static_cast<unsigned long>(ahtSeq),
             static_cast<unsigned long>(imuValid),
             static_cast<unsigned long>(imuSeq),
-            static_cast<unsigned long>(bootError));
+            static_cast<unsigned long>(bootError),
+            static_cast<unsigned long>(motionValid),
+            static_cast<unsigned long>(motionWindowSeq),
+            static_cast<unsigned long>(motionSamples),
+            static_cast<unsigned long>(motionMeanDelta),
+            static_cast<unsigned long>(motionPeakDelta),
+            static_cast<unsigned long>(motionFailed),
+            static_cast<unsigned long>(motionElapsedMs),
+            static_cast<unsigned long>(motionMaxGapMs));
         if (n > 0 && n < static_cast<int>(sizeof(line))) {
             writeLine(line);
             ++g_studysense_log_count;

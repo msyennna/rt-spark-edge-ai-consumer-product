@@ -8,6 +8,7 @@
 #include "stm32f4xx_hal.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "semphr.h"
 
 volatile uint32_t g_i2c2_initialized = 0;
 volatile uint32_t g_sensor_probe_count = 0;
@@ -48,6 +49,7 @@ static int16_t DecodeSigned16(const uint8_t* b)
 }
 
 static I2C_HandleTypeDef s_i2c2 = {};
+static SemaphoreHandle_t s_i2c2_mutex = nullptr;
 
 static bool InitializeI2C2()
 {
@@ -75,11 +77,34 @@ static bool InitializeI2C2()
     return HAL_I2C_Init(&s_i2c2) == HAL_OK;
 }
 
+// Called only by the motion task; the legacy SensorProbeTask owns I2C2.
+// Locking prevents interleaved transactions on the same STM32 peripheral.
+bool SensorReadMotionAcceleration(int16_t *x, int16_t *y, int16_t *z)
+{
+    if (x == nullptr || y == nullptr || z == nullptr ||
+        !g_i2c2_initialized || !g_imu_configured || s_i2c2_mutex == nullptr) {
+        return false;
+    }
+    if (xSemaphoreTake(s_i2c2_mutex, pdMS_TO_TICKS(15)) != pdTRUE) return false;
+    uint8_t raw[6] = {};
+    const HAL_StatusTypeDef status = HAL_I2C_Mem_Read(
+        &s_i2c2, static_cast<uint16_t>(0x68u << 1), 0x3Bu,
+        I2C_MEMADD_SIZE_8BIT, raw, sizeof(raw), 15);
+    xSemaphoreGive(s_i2c2_mutex);
+    if (status != HAL_OK) return false;
+    *x = DecodeSigned16(&raw[0]);
+    *y = DecodeSigned16(&raw[2]);
+    *z = DecodeSigned16(&raw[4]);
+    return true;
+}
+
 void SensorProbeTask(void *)
 {
     // Start after FreeRTOS is active and the sensors have had time to power up.
     vTaskDelay(pdMS_TO_TICKS(100));
-    g_i2c2_initialized = InitializeI2C2() ? 1u : 0u;
+    s_i2c2_mutex = xSemaphoreCreateMutex();
+    g_i2c2_initialized =
+        (s_i2c2_mutex != nullptr && InitializeI2C2()) ? 1u : 0u;
 
     // Wake the IMU from sleep using PWR_MGMT_1 = 0x00.
     // This is intentionally one-time initialization; do not reset it each probe.
@@ -134,7 +159,8 @@ void SensorProbeTask(void *)
     for (;;) {
         ++g_sensor_probe_count;
 
-        if (g_i2c2_initialized) {
+        if (g_i2c2_initialized && s_i2c2_mutex != nullptr &&
+            xSemaphoreTake(s_i2c2_mutex, pdMS_TO_TICKS(30)) == pdTRUE) {
             const uint16_t icmAddr = (uint16_t)(0x68u << 1);
             const uint16_t apsAddr = (uint16_t)(0x1Eu << 1);
 
@@ -253,6 +279,7 @@ void SensorProbeTask(void *)
                 }
             }
             g_i2c2_last_error = HAL_I2C_GetError(&s_i2c2);
+            xSemaphoreGive(s_i2c2_mutex);
         }
 
         vTaskDelayUntil(&lastWake, pdMS_TO_TICKS(2000));
