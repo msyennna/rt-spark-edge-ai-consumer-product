@@ -10,6 +10,7 @@
 #include "sensor_probe.h"
 #include "aht21_probe.h"
 #include "motion_probe.h"
+#include "studysense_inference.h"
 
 // Boot diagnostics defined by src/main.cpp (shared across translation units).
 extern volatile uint32_t g_boot_error;
@@ -133,6 +134,35 @@ void StudySenseLoggerTask(void *) {
             ++g_studysense_log_count;
         } else {
             ++g_studysense_uart_errors;
+        }
+        // Human-readable AI diagnostic, ignored by existing 23-column CSV collector.
+        // Never print an AI class when the generated header is a placeholder.
+        if (g_studysense_log_count != 0u && (g_studysense_log_count % 5u) == 0u) {
+            taskENTER_CRITICAL();
+            const uint32_t trained = g_ai_model_trained;
+            const uint32_t aiStatus = g_ai_status;
+            const uint32_t aiLabel = g_ai_prediction;
+            const uint32_t aiCount = g_ai_samples_collected;
+            const uint32_t aiWindows = g_ai_window_count;
+            const uint32_t aiCycles = g_ai_inference_cycles;
+            const uint32_t aiAls = g_ai_als_sum;
+            const uint32_t aiMotion = g_ai_motion_mean_sum;
+            const uint32_t aiPeak = g_ai_motion_peak_max;
+            taskEXIT_CRITICAL();
+            char diagnostic[220] = {};
+            const int k = snprintf(diagnostic, sizeof(diagnostic),
+                "# AI_STATUS,trained=%lu,status=%lu,class_id=%lu,collecting=%lu,"
+                "windows=%lu,cycles=%lu,last_als_sum=%lu,last_motion_sum=%lu,last_peak=%lu\r\n",
+                static_cast<unsigned long>(trained),
+                static_cast<unsigned long>(aiStatus),
+                static_cast<unsigned long>(aiLabel),
+                static_cast<unsigned long>(aiCount),
+                static_cast<unsigned long>(aiWindows),
+                static_cast<unsigned long>(aiCycles),
+                static_cast<unsigned long>(aiAls),
+                static_cast<unsigned long>(aiMotion),
+                static_cast<unsigned long>(aiPeak));
+            if (k > 0 && k < static_cast<int>(sizeof(diagnostic))) writeLine(diagnostic);
         }
         vTaskDelayUntil(&wake, pdMS_TO_TICKS(2000));
     }

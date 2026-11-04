@@ -8,6 +8,7 @@
 #include "aht21_probe.h"
 #include "studysense_logger.h"
 #include "motion_probe.h"
+#include "studysense_inference.h"
 
 volatile uint32_t g_led_count = 0;
 volatile uint32_t g_health_count = 0;
@@ -114,6 +115,12 @@ int main(void)
     // Experimental fast motion task (~50 Hz) owns no other I2C peripheral.
     if (xTaskCreate(MotionSamplerTask, "Motion", 384, nullptr, 2, nullptr) != pdPASS) {
         g_boot_error = 10;
+        for (;;) {}
+    }
+
+    // Collect 5 validated sensor snapshots and classify only if a real model is installed.
+    if (xTaskCreate(StudySenseInferenceTask, "SS_AI", 512, nullptr, 1, nullptr) != pdPASS) {
+        g_boot_error = 11;
         for (;;) {}
     }
 
